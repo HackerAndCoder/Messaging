@@ -1,5 +1,6 @@
 import json, database
-from fastapi import FastAPI
+from database import User, Chat, Message
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -13,26 +14,46 @@ app.add_middleware(
     allow_headers=["*"],   # e.g. Content-Type, Authorization
 )
 
-class Message(BaseModel):
-    message: str
-    chat: int
+class MessageSendRequest(BaseModel):
+    text : str
+    chat_id : int
 
-class ChatRequest(BaseModel):
-    chat: int
+class ChatCreateRequest(BaseModel):
+    title : str
+
 
 @app.on_event("startup")
-def _startup(): database.create_db()
+def _startup(): 
+    database.create_db()
 
 @app.get("/")
 def root():
     return {"message": "error"}
 
 @app.post("/send")
-def message_send(msg : Message):
+def message_send(msg : MessageSendRequest):
     print(msg)
     return {"response": "test"}
 
-@app.post("/chat")
-def get_chat(chat : ChatRequest):
-    print(f"chat {chat}")
-    return {"id": chat.chat, "messages": []}
+@app.post("/request-chat")
+def get_chat(chat_id : int):
+    print(f"chat {chat_id}")
+    return {"id": chat_id, "messages": []}
+
+@app.post("/create-chat")
+def create_chat(chat : ChatCreateRequest):
+    print(f"{chat}")
+    return {}
+
+# NO AUTH FOR NOW
+@app.post("/get-user")
+def get_user(username : str, s : database.Session = Depends(database.get_session)):
+    # TEST
+    
+    database.create_user("test", s)
+    
+    user = database.get_user(username, s)
+    if not user:
+        return {"error": "No user found"}
+    return user
+

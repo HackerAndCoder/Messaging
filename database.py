@@ -40,6 +40,18 @@ def create_user(username : str, s : Session = Depends(get_session)) -> User | No
     s.refresh(user)
     return user
 
+def get_user(username : str, s : Session = Depends(get_session)) -> User | None:
+    user = s.exec(
+        select(
+            User
+        )
+        .where(User.username == username)
+    ).first()
+    
+    if not user:
+        return None
+    return user
+
 def create_chat(title : str, s : Session = Depends(get_session)) -> Chat:
     chat = Chat(title = title)
     s.add(chat)
@@ -47,7 +59,7 @@ def create_chat(title : str, s : Session = Depends(get_session)) -> Chat:
     s.refresh(chat)
     return chat
 
-def get_user_chats(user_id : int, s : Session = Depends(get_session)):
+def get_user_chats(user_id : int, s : Session = Depends(get_session)) -> List[Chat]:
     subq = select(Membership.chat_id).where(Membership.user_id == user_id)
     query = select(Chat).where(Chat.id.in_(subq))
     chats = s.exec(query).all()
@@ -62,6 +74,47 @@ def send_message(chat_id : int, user_id : int, text : str, s : Session = Depends
     s.refresh(message)
     return message
 
-def list_messages(chat_id : int, s : Session = Depends(get_session)):
+def list_messages(chat_id : int, s : Session = Depends(get_session)) -> List[Message]:
     q = select(Message).where(Message.chat_id == chat_id).order_by(Message.created_at.asc())
+    return list(s.exec(q))
+
+def add_user_to_chat(chat_id : int, user_id : int, s : Session = Depends(get_session)) -> bool:
+    chat = s.get(Chat, chat_id)
+    if not chat:
+        return False
+    user = s.get(User, user_id)
+    if not user:
+        return False
+    
+    existing = s.exec(
+        select(Membership).where(
+            Membership.chat_id == chat_id,
+            Membership.user_id == user_id
+        )
+    ).first()
+    
+    if existing:
+        return True
+    
+    s.add(Membership(chat_id = chat_id, user_id = user_id))
+    s.commit()
+    return True
+
+def remove_member(chat_id: int, user_id: int, s: Session = Depends(get_session)) -> None:
+    m = s.exec(
+        select(Membership).where(Membership.chat_id == chat_id, Membership.user_id == user_id)
+    ).first()
+    if not m:
+        return
+    s.delete(m)
+    s.commit()
+    return
+
+def list_members(chat_id: int, s: Session = Depends(get_session)) -> List[User]:
+    q = (
+        select(User)
+        .join(Membership, Membership.user_id == User.id)
+        .where(Membership.chat_id == chat_id)
+        .order_by(User.username.asc())
+    )
     return list(s.exec(q))
